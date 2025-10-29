@@ -1,6 +1,7 @@
-# course_lang_graph_01
+# LangGraph Complete Course for Beginners – Complex AI Agents with Python
 
 Learning repository containing Jupyter notebooks for an introductory course on language + graph concepts.
+Based on [this video](https://www.youtube.com/watch?v=jGg_1h0qzaM)
 
 ## Repository contents
 
