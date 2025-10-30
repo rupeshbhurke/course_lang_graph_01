@@ -1,0 +1,20 @@
+# Pinned requirements generated from the configured Python environment (Conda).
+# Notes:
+# - `langgraph` was not installed in this environment. If `langgraph` is a
+#   local package, install it editable (e.g. `pip install -e .` from its repo).
+#   If it's available on PyPI, replace the line below with the correct version.
+# - Some notebook-related packages (jupyter/notebook/ipython) were not present
+#   in the environment; recommended pins are provided as optional entries.
+
+langgraph
+openai==1.107.3
+numpy==2.3.3
+pandas==2.3.2
+tiktoken==0.11.0
+typing-extensions==4.12.2
+
+# Optional / recommended (not present in the scanned environment):
+ipython==8.16.2
+notebook==6.5.4
+jupyterlab==4.1.0
+graphviz==0.20.1
