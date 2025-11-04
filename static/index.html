@@ -1,39 +1,88 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8" />
-  <title>💬 Ollama Streaming Chat</title>
+  <meta charset="UTF-8">
+  <title>🧠 Ollama Chat (with Memory)</title>
   <style>
     body { font-family: sans-serif; margin: 2em; background: #f9f9f9; }
-    #output { white-space: pre-wrap; background: white; border: 1px solid #ccc; padding: 1em; min-height: 200px; }
-    input { width: 80%; padding: 0.5em; }
+    #output { white-space: pre-wrap; background: white; border: 1px solid #ccc; padding: 1em; min-height: 200px; margin-bottom: 1em; }
+    input { width: 70%; padding: 0.5em; }
     button { padding: 0.5em 1em; }
+    select { padding: 0.5em; }
   </style>
 </head>
 <body>
-  <h2>🧠 Local Ollama Chat (Session Memory Enabled)</h2>
-  <input id="input" type="text" placeholder="Ask something..." />
-  <button onclick="sendMessage()">Send</button>
+  <h2>💬 Ollama Chat (Session Memory via Redis)</h2>
+  <div>
+    <label>Conversation:</label>
+    <select id="conversationSelect"></select>
+    <button onclick="startNew()">➕ New Conversation</button>
+  </div>
+
   <div id="output"></div>
+  <input id="input" type="text" placeholder="Type a message..." />
+  <button onclick="sendMessage()">Send</button>
 
   <script>
-    // Generate a unique session ID per browser tab
-    const sessionId = crypto.randomUUID();
+    let sessionId = null;
     const output = document.getElementById("output");
+    const select = document.getElementById("conversationSelect");
+
+    async function loadConversations() {
+      const res = await fetch("/conversations");
+      const data = await res.json();
+      select.innerHTML = "";
+      data.sessions.forEach(id => {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = id;
+        select.appendChild(opt);
+      });
+      if (data.sessions.length > 0) {
+        sessionId = data.sessions[0];
+        select.value = sessionId;
+        await loadHistory();
+      } else {
+        await startNew();
+      }
+    }
+
+    async function startNew() {
+      const res = await fetch("/new_conversation", { method: "POST" });
+      const data = await res.json();
+      sessionId = data.session_id;
+      await loadConversations();
+      output.innerHTML = `🆕 Started new conversation.\n`;
+    }
+
+    async function loadHistory() {
+      const res = await fetch(`/conversation/${sessionId}`);
+      const data = await res.json();
+      output.innerHTML = "";
+      for (const msg of data.messages) {
+        const who = msg.role === "user" ? "🧍 You" : msg.role === "assistant" ? "🤖 AI" : "ℹ️ System";
+        output.innerHTML += `${who}: ${msg.content}\n`;
+      }
+    }
+
+    select.addEventListener("change", async () => {
+      sessionId = select.value;
+      await loadHistory();
+    });
 
     async function sendMessage() {
       const msg = document.getElementById("input").value.trim();
-      if (!msg) return;
-      output.innerHTML += `\n🧍‍♂️ You: ${msg}\n🤖 AI: `;
+      if (!msg || !sessionId) return;
+      output.innerHTML += `\n🧍 You: ${msg}\n🤖 AI: `;
       document.getElementById("input").value = "";
 
-      const response = await fetch(`/chat/stream?session_id=${sessionId}`, {
+      const res = await fetch(`/chat/stream?session_id=${sessionId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: msg }),
       });
 
-      const reader = response.body.getReader();
+      const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
 
@@ -41,8 +90,6 @@
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-
-        // Parse SSE chunks
         const parts = buffer.split("\n\n");
         buffer = parts.pop();
         for (const part of parts) {
@@ -54,6 +101,9 @@
         }
       }
     }
+
+    // Initialize UI
+    loadConversations();
   </script>
 </body>
 </html>
