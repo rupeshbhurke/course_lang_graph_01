@@ -88,19 +88,26 @@ async def chat_stream(request: Request, session_id: str = Query(...)):
     existing_context = get_context(session_id)
 
     async def event_generator():
+        full_response = ""  # Accumulate the complete response
         async for chunk in stream_from_ollama(prompt, existing_context):
             try:
                 data = json.loads(chunk)
             except json.JSONDecodeError:
                 continue
+            
+            # Accumulate response chunks
+            if data.get("response"):
+                full_response += data.get("response")
+            
             yield f"data: {json.dumps(data)}\n\n"
 
             if data.get("done"):
                 new_context = data.get("context")
                 if new_context:
                     set_context(session_id, new_context)
-                # Store assistant message at completion
-                append_message(session_id, "assistant", data.get("response", ""))
+                # Store the complete accumulated assistant message
+                if full_response.strip():
+                    append_message(session_id, "assistant", full_response.strip())
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -130,11 +137,32 @@ async def conversation_history(session_id: str):
     return {"session_id": session_id, "messages": get_conversation(session_id)}
 
 # ---------------------------------------------------------------------------
+# Delete conversation
+# ---------------------------------------------------------------------------
+@app.delete("/conversation/{session_id}")
+async def delete_conversation(session_id: str):
+    # Delete both the conversation messages and context
+    deleted_session = r.delete(f"session:{session_id}")
+    deleted_context = r.delete(f"context:{session_id}")
+    
+    if deleted_session or deleted_context:
+        return {"message": f"Conversation {session_id} deleted successfully"}
+    else:
+        return JSONResponse({"error": "Conversation not found"}, status_code=404)
+
+# ---------------------------------------------------------------------------
 # Health check
 # ---------------------------------------------------------------------------
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": OLLAMA_MODEL, "conversations": len(list_conversations())}
+    conversations = list_conversations()
+    return {
+        "status": "ok", 
+        "model": OLLAMA_MODEL, 
+        "conversations": len(conversations),
+        "redis_host": REDIS_HOST,
+        "redis_port": REDIS_PORT
+    }
 
 # ---------------------------------------------------------------------------
 # Serve frontend

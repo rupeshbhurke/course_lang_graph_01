@@ -7,8 +7,11 @@
     body { font-family: sans-serif; margin: 2em; background: #f9f9f9; }
     #output { white-space: pre-wrap; background: white; border: 1px solid #ccc; padding: 1em; min-height: 200px; margin-bottom: 1em; }
     input { width: 70%; padding: 0.5em; }
-    button { padding: 0.5em 1em; }
+    button { padding: 0.5em 1em; margin: 0 0.2em; }
     select { padding: 0.5em; }
+    #deleteBtn { background-color: #ff4444; color: white; border: none; border-radius: 3px; }
+    #deleteBtn:hover:not(:disabled) { background-color: #cc0000; }
+    #deleteBtn:disabled { background-color: #cccccc; color: #666666; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -17,6 +20,7 @@
     <label>Conversation:</label>
     <select id="conversationSelect"></select>
     <button onclick="startNew()">➕ New Conversation</button>
+    <button onclick="deleteConversation()" id="deleteBtn">🗑️ Delete</button>
   </div>
 
   <div id="output"></div>
@@ -32,19 +36,34 @@
       const res = await fetch("/conversations");
       const data = await res.json();
       select.innerHTML = "";
+      
+      const deleteBtn = document.getElementById("deleteBtn");
+      
+      if (data.sessions.length === 0) {
+        // No conversations exist, create a new one
+        deleteBtn.disabled = true;
+        deleteBtn.style.opacity = "0.5";
+        await startNew();
+        return;
+      }
+      
+      // Enable delete button when conversations exist
+      deleteBtn.disabled = false;
+      deleteBtn.style.opacity = "1";
+      
       data.sessions.forEach(id => {
         const opt = document.createElement("option");
         opt.value = id;
         opt.textContent = id;
         select.appendChild(opt);
       });
-      if (data.sessions.length > 0) {
+      
+      // Set current session if not set or if current session no longer exists
+      if (!sessionId || !data.sessions.includes(sessionId)) {
         sessionId = data.sessions[0];
-        select.value = sessionId;
-        await loadHistory();
-      } else {
-        await startNew();
       }
+      select.value = sessionId;
+      await loadHistory();
     }
 
     async function startNew() {
@@ -53,6 +72,30 @@
       sessionId = data.session_id;
       await loadConversations();
       output.innerHTML = `🆕 Started new conversation.\n`;
+    }
+
+    async function deleteConversation() {
+      if (!sessionId) {
+        alert("No conversation selected to delete.");
+        return;
+      }
+      
+      if (!confirm(`Are you sure you want to delete this conversation (${sessionId})?`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/conversation/${sessionId}`, { method: "DELETE" });
+        if (res.ok) {
+          output.innerHTML = "🗑️ Conversation deleted.\n";
+          sessionId = null;
+          await loadConversations();
+        } else {
+          alert("Failed to delete conversation.");
+        }
+      } catch (error) {
+        alert("Error deleting conversation: " + error.message);
+      }
     }
 
     async function loadHistory() {
@@ -96,7 +139,11 @@
           if (part.startsWith("data:")) {
             const data = JSON.parse(part.slice(5).trim());
             if (data.response) output.innerHTML += data.response;
-            if (data.done) output.innerHTML += "\n";
+            if (data.done) {
+              output.innerHTML += "\n";
+              // Reload conversation history after completion to ensure persistence
+              setTimeout(() => loadHistory(), 100);
+            }
           }
         }
       }
