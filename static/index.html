@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>💬 Ollama Streaming Chat</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; background: #f9f9f9; }
+    #output { white-space: pre-wrap; background: white; border: 1px solid #ccc; padding: 1em; min-height: 200px; }
+    input { width: 80%; padding: 0.5em; }
+    button { padding: 0.5em 1em; }
+  </style>
+</head>
+<body>
+  <h2>🧠 Local Ollama Chat (Session Memory Enabled)</h2>
+  <input id="input" type="text" placeholder="Ask something..." />
+  <button onclick="sendMessage()">Send</button>
+  <div id="output"></div>
+
+  <script>
+    // Generate a unique session ID per browser tab
+    const sessionId = crypto.randomUUID();
+    const output = document.getElementById("output");
+
+    async function sendMessage() {
+      const msg = document.getElementById("input").value.trim();
+      if (!msg) return;
+      output.innerHTML += `\n🧍‍♂️ You: ${msg}\n🤖 AI: `;
+      document.getElementById("input").value = "";
+
+      const response = await fetch(`/chat/stream?session_id=${sessionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg }),
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE chunks
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop();
+        for (const part of parts) {
+          if (part.startsWith("data:")) {
+            const data = JSON.parse(part.slice(5).trim());
+            if (data.response) output.innerHTML += data.response;
+            if (data.done) output.innerHTML += "\n";
+          }
+        }
+      }
+    }
+  </script>
+</body>
+</html>
